@@ -75,7 +75,7 @@ void loop() {
 
 
   //maxVal = 4095
-  float upperLimit = maxVal * 0.75;
+  float upperLimit = maxVal * 0.60;
   float lowerLimit = maxVal * 0.25;
 
   if (sensorValue > upperLimit) {

@@ -9,7 +9,7 @@ Servo ringServo;
 Servo pinkyServo;
 
 int pointerPin = 14;
-int middlePin = 17;
+int middlePin = 13;
 int ringPin = 18;
 int pinkyPin = 16;
 
@@ -123,7 +123,7 @@ void setup() {
 
 void loop() {
   // put your main code here, to run repeatedly:
-  delay(100);
+  delay(1000);
 
   //recieve muscle state
   // check current state (false = open hand , true = closed hand)
