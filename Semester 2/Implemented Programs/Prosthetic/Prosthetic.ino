@@ -15,10 +15,12 @@ Servo middleServo;
 Servo ringServo;
 Servo pinkyServo;
 
-int pointerPin = 14;
-int middlePin = 13;
-int ringPin = 18;
-int pinkyPin = 16;
+int pointerPin = 27;
+int middlePin = 14;
+int ringPin = 12;
+int pinkyPin = 13;
+
+
 
 // available pins for servos 
 /*
@@ -180,9 +182,14 @@ void closeHand()
 {
   if(receivedData.t != currentState)
   {
-    middleServo.write(50);
+    pinkyServo.write(50);
+    ringServo.write(50);
+    pointerServo.write(50);
     delay(400);
-    middleServo.write(90);
+    pinkyServo.write(90); //STOP MOVING SERVOS
+    ringServo.write(90);
+    pointerServo.write(90);
+
     currentState = receivedData.t;
   }  
 }
@@ -192,10 +199,13 @@ void openHand()
 {
   if(receivedData.t != currentState)
   {
-    middleServo.write(160);
+    pinkyServo.write(160);
+    ringServo.write(160);
+    pointerServo.write(160);
     delay(400);
-    middleServo.write(90);
+    pinkyServo.write(90); //STOP MOVING SERVOS
+    ringServo.write(90);
+    pointerServo.write(90);
     currentState = receivedData.t;
   }
 }
-
