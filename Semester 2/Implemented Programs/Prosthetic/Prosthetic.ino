@@ -1,13 +1,22 @@
 #include "ESP32_NOW.h"
 #include "WiFi.h"
+#include <esp_mac.h>  // For the MAC2STR and MACSTR macros
+#include <vector>
+
 #include <ESP32Servo.h>
 #include <PubSubClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <map>
 #include "config.h" //configuration file with credentials
 
 
 //https://community.hivemq.com/t/hivemq-using-esp32-and-nodered/1291  == MQTT skeleton code
+
+//Definitions
+
+//#define ESPNOW_WIFI_CHANNEL 6
+
 
 
 Servo pointerServo;
@@ -15,26 +24,154 @@ Servo middleServo;
 Servo ringServo;
 Servo pinkyServo;
 
-int pointerPin = 27;
+int pointerPin = 13;
 int middlePin = 14;
-int ringPin = 12;
-int pinkyPin = 13;
+int ringPin = 27;
+int pinkyPin = 26;
+
+
+//Variables
+//uint16_t receivedValue;
+int currentState = 0;
+String gesture = "default";
 
 
 
-// available pins for servos 
-/*
-ADC1_CH1 (GPIO 37)
-ADC1_CH2 (GPIO 38)
-ADC1_CH3 (GPIO 39)
-ADC1_CH4 (GPIO 32)
-ADC1_CH5 (GPIO 33)
-ADC1_CH6 (GPIO 34)
-ADC1_CH7 (GPIO 35)
+struct Gestures{
+  int values[4][2]; //a 2D array, [4] is for each servo and [2] is for "open"/"close" where (x,0) = close speed for servo & (x,1) = open speed for servo
+};
 
-GPIO 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 25, 26, 27
+// https://www.geeksforgeeks.org/map-associative-containers-the-c-standard-template-library-stl/
 
-*/
+// { key , { { (pinky Close , pinky Open) , (ring Close, ring Open) , (middle Close , middle Open) , (pointer Close , pointer Open} } }
+std::map<std::string, Gestures> GestureMap = {
+  	{"default", { {{50, 160}, {50, 160}, {50, 160}, {50, 160}}}},
+    {"point", { {{50, 160}, {50, 160}, {50, 160}, {90, 90}}}},
+    {"peace", { {{50, 160}, {50, 160}, {90, 90}, {90, 90}}}},
+    {"power", { {{50, 160}, {50, 160}, {50, 160}, {50, 160}}}}
+};
+
+
+
+
+
+
+typedef struct struct_message {
+  bool t;
+} struct_message;
+
+struct_message receivedData;
+
+
+void moveHand(int receivedState) {
+  if(receivedState != currentState) //check that received state is different from the currents state
+  {
+    int pinky, ring, middle, pointer = 90;
+
+    if(receivedState == 1)  // muscle is stimulated (representing close hand)
+    {                       // set variables to close values from the gesture map
+
+      pinky = GestureMap[gesture.c_str()].values[0][0];
+      ring = GestureMap[gesture.c_str()].values[1][0];
+      middle = GestureMap[gesture.c_str()].values[2][0];
+      pointer = GestureMap[gesture.c_str()].values[3][0];
+    }
+    else //otherwise muscle is not stimulated (representing an open/relax hand)
+    {     //set variables to open values from the gesture map
+
+      pinky = GestureMap[gesture.c_str()].values[0][1];
+      ring = GestureMap[gesture.c_str()].values[1][1];
+      middle = GestureMap[gesture.c_str()].values[2][1];
+      pointer = GestureMap[gesture.c_str()].values[3][1];
+    }
+
+
+    Serial.println(pinky);
+
+    //write these variables to the servos to move the hand
+
+    pinkyServo.write(pinky);
+    ringServo.write(ring);
+    middleServo.write(middle);
+    pointerServo.write(pointer);
+    delay(400);   //time delay to allow for servos to fully close over
+    pinkyServo.write(90); //STOP MOVING SERVOS
+    ringServo.write(90);
+    middleServo.write(90);
+    pointerServo.write(90);
+    currentState = receivedState; //set the received value as the new current state
+
+  }
+}
+
+
+/* Classes */
+
+// Creating a new class that inherits from the ESP_NOW_Peer class is required.
+
+class ESP_NOW_Peer_Class : public ESP_NOW_Peer {
+public:
+  // Constructor of the class
+  ESP_NOW_Peer_Class(const uint8_t *mac_addr, uint8_t channel, wifi_interface_t iface, const uint8_t *lmk) : ESP_NOW_Peer(mac_addr, channel, iface, lmk) {}
+
+  // Destructor of the class
+  ~ESP_NOW_Peer_Class() {}
+
+  // Function to register the master peer
+  bool add_peer() {
+    if (!add()) {
+      log_e("Failed to register the broadcast peer");
+      return false;
+    }
+    return true;
+  }
+
+  // Function to print the received messages from the master
+  void onReceive(const uint8_t *data, size_t len, bool broadcast) {
+    if(len == sizeof(receivedData))
+    {
+      memcpy(&receivedData, data, sizeof(receivedData));
+      Serial.print("Muscle State: ");
+      Serial.printf("  Muscle State: %s\n", receivedData.t ? "TRUE" : "FALSE");
+
+      moveHand(receivedData.t);
+    }
+    else
+    {
+      Serial.println("Incorrect message size");
+    }
+    
+  }
+};
+
+std::vector<ESP_NOW_Peer_Class> masters; //list of masters
+
+/* Callbacks */
+
+// Callback called when an unknown peer sends a message
+void register_new_master(const esp_now_recv_info_t *info, const uint8_t *data, int len, void *arg) {
+  if (memcmp(info->des_addr, ESP_NOW.BROADCAST_ADDR, 6) == 0) {
+    Serial.printf("Unknown peer " MACSTR " sent a broadcast message\n", MAC2STR(info->src_addr));
+    Serial.println("Registering the peer as a master");
+
+    uint8_t wifi_channel = WiFi.channel();
+
+
+    ESP_NOW_Peer_Class new_master(info->src_addr, wifi_channel, WIFI_IF_STA, NULL);
+
+    masters.push_back(new_master);
+    if (!masters.back().add_peer()) {
+      Serial.println("Failed to register the new master");
+      return;
+    }
+  } else {
+    // The slave will only receive broadcast messages
+    log_v("Received a unicast message from " MACSTR, MAC2STR(info->src_addr));
+    log_v("Igorning the message");
+  }
+}
+
+
 
 //MQTT
 WiFiClientSecure espClient;
@@ -45,18 +182,8 @@ unsigned long lastMsg = 0;
 char msg[MSG_BUFFER_SIZE];
 
 
-typedef struct struct_message {
-  bool t;
-  uint16_t d; 
-} struct_message;
-
-struct_message receivedData;
 
 
-//Variables
-uint16_t receivedValue;
-int currentState = 0;
-String gesture = "default";
 
 
 
@@ -65,6 +192,10 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   WiFi.mode(WIFI_STA);
+  //WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
+  while (!WiFi.STA.started()) {
+    delay(100);
+  }
   WiFi.begin(ssid, password);
 
   while (WiFi.status() != WL_CONNECTED) {
@@ -82,7 +213,26 @@ void setup() {
   client.setServer(mqtt_server, mqtt_port);
   client.setCallback(callback);
 
+  delay(500);
 
+
+
+  //Begin ESP-NOW
+
+  // Initialize the ESP-NOW protocol
+  if (!ESP_NOW.begin()) {
+    Serial.println("Failed to initialize ESP-NOW");
+    Serial.println("Reeboting in 5 seconds...");
+    delay(5000);
+    ESP.restart();
+  }
+
+  // Register the new peer callback
+  uint8_t wifi_channel = WiFi.channel();
+  Serial.println(wifi_channel);
+  ESP_NOW.onNewPeer(register_new_master, NULL);
+
+  /*
   //Begin ESP-NOW
   if (esp_now_init() != ESP_OK)
   {
@@ -91,7 +241,9 @@ void setup() {
   }
 
 
-  esp_now_register_recv_cb(onDataRecv);
+  esp_now_register_recv_cb(esp_now_recv_cb_t(onDataRecv));
+
+  */
 
   //connecting Servos to pins
   pointerServo.attach(pointerPin);
@@ -157,37 +309,32 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 
+/*
 // Callback when data is received from ESP-NOW 
 void onDataRecv(const esp_now_recv_info_t *recvInfo, const uint8_t *data, int dataLen) {
   memcpy(&receivedData, data, sizeof(receivedData));
   Serial.print("Muscle State: ");
-  Serial.println(receivedData.d);
   Serial.println(receivedData.t);
 
+  moveHand(receivedData.t);
 
-  //re design this code to accomodate for gestures
-  if(receivedData.t == 1)
-  {
-    Serial.println("Closing Hand");
-    closeHand();
-  }
-  else
-  {
-    Serial.println("Opening Hand");
-    openHand();
-  }
 }
 
+*/
+
+/*
 void closeHand()
 {
   if(receivedData.t != currentState)
   {
     pinkyServo.write(50);
     ringServo.write(50);
+    middleServo.write(50);
     pointerServo.write(50);
     delay(400);
     pinkyServo.write(90); //STOP MOVING SERVOS
     ringServo.write(90);
+    middleServo.write(90);
     pointerServo.write(90);
 
     currentState = receivedData.t;
@@ -201,11 +348,21 @@ void openHand()
   {
     pinkyServo.write(160);
     ringServo.write(160);
+    middleServo.write(160);
     pointerServo.write(160);
     delay(400);
     pinkyServo.write(90); //STOP MOVING SERVOS
     ringServo.write(90);
+    middleServo.write(90);
     pointerServo.write(90);
     currentState = receivedData.t;
   }
+
 }
+*/
+
+
+
+
+
+
