@@ -4,7 +4,6 @@
 #include "config.h" //configuration file with credentials
 
 
-//devices mac address = 24:0a:c4:2e:57:64
 
 
 // Definitions
@@ -17,8 +16,6 @@ int pinENV = 33;
 int maxVal = 4095;
 bool muscleState = false;
 
-//Prosthetic mac address
-//uint8_t broadcastAddress[] = { 0x88, 0x13, 0xBF, 0x6A, 0x0A, 0x6C };  //88:13:bf:6a:0a:6c
 
 
 /* Classes */

@@ -13,9 +13,6 @@
 
 //https://community.hivemq.com/t/hivemq-using-esp32-and-nodered/1291  == MQTT skeleton code
 
-//Definitions
-
-//#define ESPNOW_WIFI_CHANNEL 6
 
 
 
@@ -24,17 +21,22 @@ Servo middleServo;
 Servo ringServo;
 Servo pinkyServo;
 
-int pointerPin = 13;
-int middlePin = 14;
+int pointerPin = 26;
+int middlePin = 4; //check pin 19
 int ringPin = 27;
-int pinkyPin = 26;
+int pinkyPin = 13;
+
+
+//Origional pin layout as of 26/03/25
+// int pointerPin = 13;
+// int middlePin = 4; //check pin 19
+// int ringPin = 27;
+// int pinkyPin = 26;
+
 
 
 //Variables
-//uint16_t receivedValue;
 int currentState = 0;
-String gesture = "default";
-
 
 
 struct Gestures{
@@ -55,12 +57,24 @@ std::map<std::string, Gestures> GestureMap = {
 
 
 
+//Structured Messages
 
+  //Structured message for muscle stimulation data
 typedef struct struct_message {
   bool t;
 } struct_message;
 
 struct_message receivedData;
+
+
+  //Structured message for gesture
+typedef struct struct_gesture {
+  String g;
+} struct_gesture;
+
+struct_gesture gesture;
+
+
 
 
 void moveHand(int receivedState) {
@@ -71,18 +85,18 @@ void moveHand(int receivedState) {
     if(receivedState == 1)  // muscle is stimulated (representing close hand)
     {                       // set variables to close values from the gesture map
 
-      pinky = GestureMap[gesture.c_str()].values[0][0];
-      ring = GestureMap[gesture.c_str()].values[1][0];
-      middle = GestureMap[gesture.c_str()].values[2][0];
-      pointer = GestureMap[gesture.c_str()].values[3][0];
+      pinky = GestureMap[gesture.g.c_str()].values[0][0];
+      ring = GestureMap[gesture.g.c_str()].values[1][0];
+      middle = GestureMap[gesture.g.c_str()].values[2][0];
+      pointer = GestureMap[gesture.g.c_str()].values[3][0];
     }
     else //otherwise muscle is not stimulated (representing an open/relax hand)
     {     //set variables to open values from the gesture map
 
-      pinky = GestureMap[gesture.c_str()].values[0][1];
-      ring = GestureMap[gesture.c_str()].values[1][1];
-      middle = GestureMap[gesture.c_str()].values[2][1];
-      pointer = GestureMap[gesture.c_str()].values[3][1];
+      pinky = GestureMap[gesture.g.c_str()].values[0][1];
+      ring = GestureMap[gesture.g.c_str()].values[1][1];
+      middle = GestureMap[gesture.g.c_str()].values[2][1];
+      pointer = GestureMap[gesture.g.c_str()].values[3][1];
     }
 
 
@@ -252,6 +266,11 @@ void setup() {
   pinkyServo.attach(pinkyPin);
   
 
+  //Serial.println(gesture);        USED FOR DEBUGGING
+  //int pinky = GestureMap[gesture.c_str()].values[0][0]; USED FOR DEBUGGING
+  //Serial.println(pinky);  USED FOR DEBUGGING
+
+  gesture.g = "default";
 
 
 }
@@ -302,9 +321,20 @@ void callback(char* topic, byte* payload, unsigned int length) {
     i++;
   }
   int payloadBeginning = incomingMessage.indexOf(":") + 1;
-  payloadValue = payloadValue.substring(payloadBeginning);
-  gesture = payloadValue;
-  Serial.println(gesture);
+  payloadValue = payloadValue.substring(payloadBeginning); //returns "{valueOfPayload}" i.e "default"
+  payloadValue = payloadValue.substring(1, payloadValue.length() - 1); //remove quotation marks around value so "default" becomes default
+
+  
+  Serial.println(gesture.g);
+  gesture.g = payloadValue;
+
+  //Serial.println(gesture.g);
+  //Serial.println(gesture); USED FOR DEBUGGING MQTT PAYLOAD
+
+
+  //int pinky = GestureMap[gesture.g.c_str()].values[2][0]; //USED FOR DEBUGGING MQTT PAYLOAD
+  //Serial.println(pinky); //USED FOR DEBUGGING MQTT PAYLOAD
+
 
 }
 
