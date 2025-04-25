@@ -4,12 +4,6 @@
 #include "config.h" //configuration file with credentials
 
 
-
-
-// Definitions
-//#define ESPNOW_WIFI_CHANNEL 6
-
-
 //Global variables
 uint16_t sensorValue;
 int pinENV = 33;
@@ -66,30 +60,25 @@ struct_message myData;
 
 
 
-
-
-//void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t status) {
-//  Serial.print("\r\nLast Packet Send Status:\t");
-//  Serial.println(status == ESP_NOW_SEND_SUCCESS ? "Delivery Success" : "Delivery Fail");
-//}
-
-
 void setup() {
   Serial.begin(9600);
   pinMode(pinENV, INPUT);
 
+  // configuring wifi
   WiFi.mode(WIFI_STA);
   while (!WiFi.STA.started()) {
     delay(100);
   }
 
+  WiFi.begin(ssid, password); //connecting to wifi network
 
-  WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-  }
+  } //waiting for connection to wifi network
+
   randomSeed(micros());
+
   Serial.println("\nWiFi connected\nIP address: ");
   Serial.println(WiFi.localIP());
 
@@ -100,30 +89,6 @@ void setup() {
     delay(5000);
     ESP.restart();
   }
-
-  /*
-  if (esp_now_init() != ESP_OK) {
-    Serial.print("Initialising ESP NOW");
-    return;
-  }
-
-
-  esp_now_register_send_cb(OnDataSent);
- 
-
-  //Register receiver mac address
-  esp_now_peer_info_t peerInfo;
-  peerInfo.channel = 0;
-  peerInfo.encrypt = false;
-
-  memcpy(peerInfo.peer_addr, broadcastAddress, 6);
-  
-  if (esp_now_add_peer(&peerInfo) != ESP_OK) {
-    Serial.println("Failed to add peer");
-    return;
-  }
-
-  */
 }
 
 void loop() {
@@ -137,19 +102,17 @@ void loop() {
 
 
   //maxVal = 4095
-  float upperLimit = maxVal * 0.55;
-  float lowerLimit = maxVal * 0.25;
+  float upperLimit = maxVal * 0.50;
+  float lowerLimit = maxVal * 0.20;
 
+  // binary classification of sensor value
   if (sensorValue > upperLimit) {
     muscleState = true;
   } else if (sensorValue < lowerLimit) {
     muscleState = false;
   }
 
-  myData.t = muscleState;
-  
-
-    // Received from: 24:0A:C4:2E:57:64 | Muscle State: 4095 , maximum value can be 4095
+  myData.t = muscleState; //setting the muscle state in structured message
 
 
   Serial.println("muscle state added to myData");
@@ -159,15 +122,5 @@ void loop() {
     Serial.println("Failed to broadcast message");
   }
 
-  /*
-  esp_err_t result = esp_now_send(broadcastAddress, (uint8_t *)&myData, sizeof(myData));
-
-  if (result == ESP_OK) {
-    Serial.println("Message sent successfully");
-  } else {
-    Serial.println("Error sending message");
-  }
-  */
-
-  delay(1250);
+  delay(1250); // 1.25 second delay
 }

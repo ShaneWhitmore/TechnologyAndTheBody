@@ -22,16 +22,9 @@ Servo ringServo;
 Servo pinkyServo;
 
 int pointerPin = 26;
-int middlePin = 4; //check pin 19
+int middlePin = 4;
 int ringPin = 27;
 int pinkyPin = 13;
-
-
-//Origional pin layout as of 26/03/25
-// int pointerPin = 13;
-// int middlePin = 4; //check pin 19
-// int ringPin = 27;
-// int pinkyPin = 26;
 
 
 
@@ -41,20 +34,18 @@ int currentState = 0;
 
 struct Gestures{
   int values[4][2]; //a 2D array, [4] is for each servo and [2] is for "open"/"close" where (x,0) = close speed for servo & (x,1) = open speed for servo
+
 };
 
 // https://www.geeksforgeeks.org/map-associative-containers-the-c-standard-template-library-stl/
 
 // { key , { { (pinky Close , pinky Open) , (ring Close, ring Open) , (middle Close , middle Open) , (pointer Close , pointer Open} } }
 std::map<std::string, Gestures> GestureMap = {
-  	{"default", { {{50, 160}, {50, 160}, {50, 160}, {50, 160}}}},
-    {"point", { {{50, 160}, {50, 160}, {50, 160}, {90, 90}}}},
-    {"peace", { {{50, 160}, {50, 160}, {90, 90}, {90, 90}}}},
-    {"power", { {{50, 160}, {50, 160}, {50, 160}, {50, 160}}}}
+  	{"default", { {{30, 130}, {30, 130}, {30, 130}, {30, 130}}}},
+    {"point", { {{30, 130}, {30, 130}, {30, 130}, {90, 90}}}},
+    {"peace", { {{30, 130}, {30, 130}, {90, 90}, {90, 90}}}},
+    {"rock", { {{90, 90}, {30, 130}, {30, 130}, {90, 90}}}} 
 };
-
-
-
 
 
 //Structured Messages
@@ -80,7 +71,7 @@ struct_gesture gesture;
 void moveHand(int receivedState) {
   if(receivedState != currentState) //check that received state is different from the currents state
   {
-    int pinky, ring, middle, pointer = 90;
+    int pinky = 90 , ring = 90 , middle = 90 , pointer = 90;
 
     if(receivedState == 1)  // muscle is stimulated (representing close hand)
     {                       // set variables to close values from the gesture map
@@ -99,21 +90,18 @@ void moveHand(int receivedState) {
       pointer = GestureMap[gesture.g.c_str()].values[3][1];
     }
 
-
-    Serial.println(pinky);
-
     //write these variables to the servos to move the hand
 
     pinkyServo.write(pinky);
     ringServo.write(ring);
     middleServo.write(middle);
     pointerServo.write(pointer);
-    delay(400);   //time delay to allow for servos to fully close over
+    delay(675);   //time delay to allow for servos to fully close over
     pinkyServo.write(90); //STOP MOVING SERVOS
     ringServo.write(90);
     middleServo.write(90);
     pointerServo.write(90);
-    currentState = receivedState; //set the received value as the new current state
+    currentState = receivedState; //set the received value as the current state
 
   }
 }
@@ -144,11 +132,11 @@ public:
   void onReceive(const uint8_t *data, size_t len, bool broadcast) {
     if(len == sizeof(receivedData))
     {
-      memcpy(&receivedData, data, sizeof(receivedData));
+      memcpy(&receivedData, data, sizeof(receivedData)); //copy data into received data structured message
       Serial.print("Muscle State: ");
-      Serial.printf("  Muscle State: %s\n", receivedData.t ? "TRUE" : "FALSE");
+      Serial.printf("  Muscle State: %s\n", receivedData.t ? "TRUE" : "FALSE"); //print the receivedData value
 
-      moveHand(receivedData.t);
+      moveHand(receivedData.t); //call on moveHand function and passing receivedData
     }
     else
     {
@@ -197,25 +185,22 @@ char msg[MSG_BUFFER_SIZE];
 
 
 
-
-
-
-
-
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   WiFi.mode(WIFI_STA);
-  //WiFi.setChannel(ESPNOW_WIFI_CHANNEL);
+
+
   while (!WiFi.STA.started()) {
     delay(100);
   }
-  WiFi.begin(ssid, password);
+  WiFi.begin(ssid, password); //connect to wifi router
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
     Serial.print(".");
-  }
+  } // waiting for connection
+
   randomSeed(micros());
   Serial.println("\nWiFi connected\nIP address: ");
   Serial.println(WiFi.localIP());
@@ -246,19 +231,6 @@ void setup() {
   Serial.println(wifi_channel);
   ESP_NOW.onNewPeer(register_new_master, NULL);
 
-  /*
-  //Begin ESP-NOW
-  if (esp_now_init() != ESP_OK)
-  {
-    Serial.print("ESP NOW Initialisation Error");
-    ESP.restart();
-  }
-
-
-  esp_now_register_recv_cb(esp_now_recv_cb_t(onDataRecv));
-
-  */
-
   //connecting Servos to pins
   pointerServo.attach(pointerPin);
   middleServo.attach(middlePin);
@@ -266,14 +238,11 @@ void setup() {
   pinkyServo.attach(pinkyPin);
   
 
-  //Serial.println(gesture);        USED FOR DEBUGGING
-  //int pinky = GestureMap[gesture.c_str()].values[0][0]; USED FOR DEBUGGING
-  //Serial.println(pinky);  USED FOR DEBUGGING
-
-  gesture.g = "default";
+  gesture.g = "default"; //set the gesture to default on start up (standard open and close of hand)
 
 
 }
+
 
 void loop() {
   if (!client.connected()) reconnect();
@@ -328,71 +297,6 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(gesture.g);
   gesture.g = payloadValue;
 
-  //Serial.println(gesture.g);
-  //Serial.println(gesture); USED FOR DEBUGGING MQTT PAYLOAD
-
-
-  //int pinky = GestureMap[gesture.g.c_str()].values[2][0]; //USED FOR DEBUGGING MQTT PAYLOAD
-  //Serial.println(pinky); //USED FOR DEBUGGING MQTT PAYLOAD
-
-
 }
-
-
-/*
-// Callback when data is received from ESP-NOW 
-void onDataRecv(const esp_now_recv_info_t *recvInfo, const uint8_t *data, int dataLen) {
-  memcpy(&receivedData, data, sizeof(receivedData));
-  Serial.print("Muscle State: ");
-  Serial.println(receivedData.t);
-
-  moveHand(receivedData.t);
-
-}
-
-*/
-
-/*
-void closeHand()
-{
-  if(receivedData.t != currentState)
-  {
-    pinkyServo.write(50);
-    ringServo.write(50);
-    middleServo.write(50);
-    pointerServo.write(50);
-    delay(400);
-    pinkyServo.write(90); //STOP MOVING SERVOS
-    ringServo.write(90);
-    middleServo.write(90);
-    pointerServo.write(90);
-
-    currentState = receivedData.t;
-  }  
-}
-
-
-void openHand()
-{
-  if(receivedData.t != currentState)
-  {
-    pinkyServo.write(160);
-    ringServo.write(160);
-    middleServo.write(160);
-    pointerServo.write(160);
-    delay(400);
-    pinkyServo.write(90); //STOP MOVING SERVOS
-    ringServo.write(90);
-    middleServo.write(90);
-    pointerServo.write(90);
-    currentState = receivedData.t;
-  }
-
-}
-*/
-
-
-
-
 
 
